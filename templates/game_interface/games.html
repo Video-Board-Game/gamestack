@@ -1,0 +1,100 @@
+{% extends 'game_interface/base.html' %}
+
+{% load static %}
+
+{% block title %}Available Games{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Available Games</h1>
+    
+    <div class="row row-cols-1 row-cols-md-3 g-4">
+        {% for game in available_games %}
+        <div class="col">
+            <div class="card h-100 game-card">
+                <img src="{% static game.image %}" class="card-img-top" alt="{{ game.name }}" style="height: 180px; object-fit: cover;">
+                <div class="card-body">
+                    <h5 class="card-title">{{ game.name }}</h5>
+                    <p class="card-text">{{ game.description }}</p>
+                </div>
+                <div class="card-footer">
+                    <button class="btn btn-primary start-game" 
+                            data-game-type="{{ game.id }}"
+                            {% if not user.is_authenticated %}disabled{% endif %}>
+                        Start Game
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12 text-center">
+            <div class="alert alert-info">
+                No games are available at the moment.
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    {% if not user.is_authenticated %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i> 
+                Please <a href="{% url 'login' %}" class="alert-link">log in</a> to start a game.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const startButtons = document.querySelectorAll('.start-game');
+    
+    startButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const gameType = this.dataset.gameType;
+            
+            // Show loading state
+            this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+            this.disabled = true;
+            
+            fetch('{% url "start_session" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    game_type: gameType
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = data.redirect_url;
+                } else {
+                    // Show error
+                    this.innerHTML = 'Start Game';
+                    this.disabled = false;
+                    alert('Failed to start game: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error starting game:', error);
+                this.innerHTML = 'Start Game';
+                this.disabled = false;
+                alert('Error starting game. Please try again.');
+            });
+        });
+    });
+    
+    function getCsrfToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    }
+});
+</script>
+{% endblock %}

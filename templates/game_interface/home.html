@@ -1,0 +1,47 @@
+{% extends 'game_interface/base.html' %}
+<!-- CSS -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.x.x/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<!-- JavaScript -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.x.x/dist/js/bootstrap.bundle.min.js"></script>
+
+{% block title %}Board Game Robot - Home{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <h1 class="display-4 mb-4">Welcome to Board Game Robot</h1>
+            <p class="lead">Play physical board games remotely with friends using our robotic system.</p>
+            
+            {% if user.is_authenticated %}
+                {% if active_sessions %}
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">Active Sessions</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="list-group">
+                                {% for session in active_sessions %}
+                                    <a href="{% url 'game_board' session.id %}"
+                                       class="list-group-item list-group-item-action">
+                                        {{ session.game_type }} - Started {{ session.created_at|timesince }} ago
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info mt-4">
+                        No active game sessions. Start a new game from the Games page!
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="mt-4">
+                    <a href="{% url 'login' %}" class="btn btn-primary btn-lg">Login to Start Playing</a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

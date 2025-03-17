@@ -1,0 +1,290 @@
+{% extends 'game_interface/base.html' %}
+
+{% load static %}
+
+{% block title %}{{ game_type|title }} - Game Board{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/game_pieces.css' %}">
+<style>
+    /* Additional inline styles */
+    .card-header.piece-info {
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #007bff;
+    }
+    
+    .progress-bar-animated {
+        animation: progress-bar-stripes 1s linear infinite;
+    }
+    
+    .game-state-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 30;
+    }
+    
+    .piece-instructions {
+        border-left: 3px solid #007bff;
+        padding-left: 15px;
+        margin-top: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Game board and camera feed -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ game_type|title }} Board</h5>
+                    <div class="d-flex align-items-center">
+                        <span class="me-2">Status:</span>
+                        <span id="game-status" class="badge bg-success">{{ game_session.status|title }}</span>
+                        <span class="mx-3">|</span>
+                        <span class="me-2">Robot:</span>
+                        <div id="robot-status-indicator" class="connection-indicator online"></div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div id="game-board" 
+                         data-session-id="{{ game_session.id }}"
+                         data-game-type="{{ game_type }}"
+                         data-game-state="{{ game_state|safe }}">
+                        <img id="camera-feed" src="{{ camera_feed_url }}" alt="Game Board Camera Feed">
+                        <div id="piece-overlay"></div>
+                        
+                        {% csrf_token %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Game history -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Move History</h5>
+                    <span class="badge bg-secondary">{{ game_session.created_at|date:"F j, Y" }}</span>
+                </div>
+                <div class="card-body">
+                    <div id="game-history">
+                        <ul id="game-history-list" class="list-group list-group-flush">
+                            <!-- History will be populated by JavaScript -->
+                            <li class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>Game started</div>
+                                    <small class="timestamp">{{ game_session.created_at|time:"g:i A" }}</small>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="game-controls">
+                <!-- Piece selection card -->
+                <div class="card mb-4">
+                    <div class="card-header piece-info">
+                        <h5 class="mb-0">Piece Selection</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="selected-piece-info">
+                            <!-- Selected piece info will be displayed here -->
+                            <p class="text-muted text-center">Click on a piece to select it</p>
+                        </div>
+                        
+                        <!-- Piece selection instructions -->
+                        <div class="piece-instructions mt-3">
+                            <h6 class="text-primary">How to move pieces:</h6>
+                            <ol class="small mb-0">
+                                <li>Click on a game piece to select it</li>
+                                <li>Click on the board where you want to move the piece</li>
+                                <li>Click "Confirm Move" to send the command to the robot</li>
+                            </ol>
+                        </div>
+                        
+                        <div class="d-grid gap-2 mt-3">
+                            <button id="confirm-move" class="btn btn-primary" disabled>
+                                <i class="bi bi-check-circle-fill me-2"></i>Confirm Move
+                            </button>
+                            <button id="cancel-move" class="btn btn-secondary" disabled>
+                                <i class="bi bi-x-circle-fill me-2"></i>Cancel
+                            </button>
+                        </div>
+                        
+                        <div id="status-messages" class="mt-3">
+                            <!-- Status messages will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Camera controls -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Camera Controls</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-12 text-center">
+                                <button class="btn btn-outline-secondary camera-control" data-direction="up">
+                                    <i class="bi bi-arrow-up"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-4 text-end">
+                                <button class="btn btn-outline-secondary camera-control" data-direction="left">
+                                    <i class="bi bi-arrow-left"></i>
+                                </button>
+                            </div>
+                            <div class="col-4 text-center">
+                                <button class="btn btn-outline-secondary camera-control" data-direction="reset">
+                                    <i class="bi bi-house"></i>
+                                </button>
+                            </div>
+                            <div class="col-4 text-start">
+                                <button class="btn btn-outline-secondary camera-control" data-direction="right">
+                                    <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12 text-center">
+                                <button class="btn btn-outline-secondary camera-control" data-direction="down">
+                                    <i class="bi bi-arrow-down"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Game options -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Game Options</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button id="reset-game" class="btn btn-warning">
+                                <i class="bi bi-arrow-repeat me-2"></i>Reset Game
+                            </button>
+                            <button id="end-session" class="btn btn-danger">
+                                <i class="bi bi-power me-2"></i>End Session
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Include Bootstrap Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
+<!-- Game interface JavaScript -->
+<script src="{% static 'js/game_interface.js' %}"></script>
+
+<script>
+    // Update your game_interface.js showTargetIndicator function
+    // by patching it at runtime
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // We need to patch the showTargetIndicator function to add the move line
+        if (window.gameInterface) {
+            const originalShowTargetIndicator = window.gameInterface.showTargetIndicator;
+            
+            window.gameInterface.showTargetIndicator = function(x, y) {
+                // Clear any existing indicators
+                const existingIndicator = document.getElementById('target-indicator');
+                if (existingIndicator) {
+                    existingIndicator.remove();
+                }
+                
+                // Clear any existing move lines
+                const existingLines = document.querySelectorAll('.move-line');
+                existingLines.forEach(line => line.remove());
+                
+                // Create and position the indicator
+                const indicator = document.createElement('div');
+                indicator.id = 'target-indicator';
+                indicator.className = 'position-absolute';
+                indicator.style.width = '20px';
+                indicator.style.height = '20px';
+                indicator.style.backgroundColor = 'rgba(0, 255, 0, 0.5)';
+                indicator.style.border = '2px solid green';
+                indicator.style.borderRadius = '50%';
+                indicator.style.transform = 'translate(-50%, -50%)';
+                indicator.style.left = `${x}%`;
+                indicator.style.top = `${y}%`;
+                indicator.style.pointerEvents = 'none'; // Don't interfere with clicks
+                indicator.style.zIndex = '20';
+                
+                // Add connecting line between piece and target
+                if (this.selectedPiece) {
+                    const pieceX = this.selectedPiece.position.x;
+                    const pieceY = this.selectedPiece.position.y;
+                    
+                    // Calculate distance and angle
+                    const dx = x - pieceX;
+                    const dy = y - pieceY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                    
+                    // Create the line
+                    const line = document.createElement('div');
+                    line.className = 'move-line';
+                    line.style.position = 'absolute';
+                    line.style.left = `${pieceX}%`;
+                    line.style.top = `${pieceY}%`;
+                    line.style.width = `${distance}%`;
+                    line.style.height = '2px';
+                    line.style.backgroundColor = 'rgba(40, 167, 69, 0.7)';
+                    line.style.transformOrigin = '0 0';
+                    line.style.transform = `rotate(${angle}deg)`;
+                    line.style.pointerEvents = 'none';
+                    line.style.zIndex = '18';
+                    
+                    this.pieceOverlay.appendChild(line);
+                }
+                
+                // Add to the overlay
+                this.pieceOverlay.appendChild(indicator);
+            };
+            
+            // Enhance the piece highlight function
+            const originalHighlightSelectedPiece = window.gameInterface.highlightSelectedPiece;
+            
+            window.gameInterface.highlightSelectedPiece = function() {
+                // Remove any existing selection highlights
+                const existingSelection = document.querySelector('.selected-piece');
+                if (existingSelection) {
+                    existingSelection.classList.remove('selected-piece');
+                    existingSelection.style.animation = '';
+                }
+                
+                // Add selection highlight to the selected piece
+                if (this.selectedPiece) {
+                    const pieceEl = document.getElementById(`piece-${this.selectedPiece.id}`);
+                    if (pieceEl) {
+                        pieceEl.classList.add('selected-piece');
+                        // Make the highlight pulse
+                        pieceEl.style.animation = 'pulse-blue 2s infinite';
+                        
+                        // Make the piece larger and more noticeable
+                        pieceEl.style.width = '25px';
+                        pieceEl.style.height = '25px';
+                        pieceEl.style.border = '3px solid #007bff';
+                        pieceEl.style.backgroundColor = 'rgba(0, 123, 255, 0.3)';
+                    }
+                }
+            };
+        }
+    });
+</script>
+{% endblock %}

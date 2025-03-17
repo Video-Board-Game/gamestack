@@ -1,0 +1,232 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Board Game Robot{% endblock %}</title>
+    <!-- CSS -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.x.x/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<!-- JavaScript -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.x.x/dist/js/bootstrap.bundle.min.js"></script>
+    {# Load Bootstrap CSS #}
+    
+    
+    {# Custom CSS #}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    
+    {# Additional CSS block for child templates #}
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {# Navigation Bar #}
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{% url 'home' %}">
+                Board Game Bot
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarMain">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" 
+                           href="{% url 'home' %}">
+                            Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'games' %}active{% endif %}"
+                           href="{% url 'games' %}">
+                            Games
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'tutorial' %}active{% endif %}"
+                           href="{% url 'tutorial' %}">
+                            How to Play
+                        </a>
+                    </li>
+                </ul>
+                
+                {# Connection Status Indicator #}
+                <div class="d-flex align-items-center me-3">
+                    <span class="text-light me-2">Robot Status:</span>
+                    <div id="connection-status" class="connection-indicator offline"></div>
+                </div>
+                
+                {# Session Controls #}
+                <div class="d-flex">
+                    {% if user.is_authenticated %}
+                        <div class="btn-group">
+                            <button class="btn btn-outline-light dropdown-toggle" 
+                                    type="button" 
+                                    data-bs-toggle="dropdown">
+                                Session Controls
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#" id="start-session">Start New Session</a></li>
+                                <li><a class="dropdown-item" href="#" id="end-session">End Current Session</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <form id="logout-form" action="{% url 'logout' %}" method="post" style="display: none;">
+                                    {% csrf_token %}
+                                </form>
+                                <a class="dropdown-item" href="#" onclick="document.getElementById('logout-form').submit(); return false;">Logout</a>
+                            </ul>
+                        </div>
+                    {% else %}
+                        <a href="{% url 'login' %}" class="btn btn-outline-light">Login</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    {# Main Content Area #}
+    <main class="container-fluid py-4">
+        {# Messages/Alerts #}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+        
+        {# Page Content #}
+        {% block content %}{% endblock %}
+    </main>
+
+    {# Footer #}
+    <footer class="footer mt-auto py-3 bg-dark fixed-bottom">
+        <div class="container text-center">
+            <span class="text-white">
+                Board Game Robot Project - WPI RBE 594 Capstone &copy; 2025
+            </span>
+        </div>
+    </footer>
+
+    {# Bootstrap JS Bundle #}
+   
+    
+    {# Custom JavaScript #}
+    <script src="{% static 'js/connection_status.js' %}"></script>
+    
+    {# Additional JavaScript block for child templates #}
+    {% block extra_js %}{% endblock %}
+
+    <script>
+        // Connection status handling
+        document.addEventListener('DOMContentLoaded', function() {
+            const connectionIndicator = document.getElementById('connection-status');
+            
+            // WebSocket connection for robot status
+            const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const statusSocket = new WebSocket(
+                `${wsScheme}://${window.location.host}/ws/status/`
+            );
+            
+            statusSocket.onopen = function() {
+                connectionIndicator.classList.remove('offline');
+                connectionIndicator.classList.add('online');
+            };
+            
+            statusSocket.onclose = function() {
+                connectionIndicator.classList.remove('online');
+                connectionIndicator.classList.add('offline');
+            };
+            
+            statusSocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.status === 'connected') {
+                    connectionIndicator.classList.remove('offline');
+                    connectionIndicator.classList.add('online');
+                } else {
+                    connectionIndicator.classList.remove('online');
+                    connectionIndicator.classList.add('offline');
+                }
+            };
+            
+            // Session control handlers
+            const startSessionBtn = document.getElementById('start-session');
+            const endSessionBtn = document.getElementById('end-session');
+            
+            if (startSessionBtn) {
+                startSessionBtn.addEventListener('click', function() {
+                    fetch('/api/session/start/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': getCookie('csrftoken')
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            window.location.href = data.redirect_url;
+                        }
+                    });
+                });
+            }
+            
+            if (endSessionBtn) {
+                endSessionBtn.addEventListener('click', function() {
+                    if (confirm('Are you sure you want to end the current session?')) {
+                        fetch('/api/session/end/', {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRFToken': getCookie('csrftoken')
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                window.location.href = '/';
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        // CSRF token helper function
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+
+    {# CSS for connection indicator #}
+    <style>
+        .connection-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .connection-indicator.online {
+            background-color: #28a745;
+            box-shadow: 0 0 8px #28a745;
+        }
+        
+        .connection-indicator.offline {
+            background-color: #dc3545;
+            box-shadow: 0 0 8px #dc3545;
+        }
+    </style>
+</body>
+</html>

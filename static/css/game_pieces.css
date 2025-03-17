@@ -1,0 +1,123 @@
+/* static/css/game_pieces.css */
+
+/* Game board and overlay */
+#game-board {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 75%; /* 4:3 aspect ratio */
+    background-color: #000;
+    overflow: hidden;
+}
+
+#camera-feed {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#piece-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    z-index: 10;
+}
+
+/* Game piece indicators */
+.piece-highlight {
+    position: absolute;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 15;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+}
+
+/* Selected piece styling */
+.selected-piece {
+    box-shadow: 0 0 10px #007bff !important;
+    border: 2px solid #007bff !important;
+    z-index: 16 !important;
+}
+
+/* Target position indicator */
+#target-indicator {
+    z-index: 20;
+}
+
+/* Move line connecting piece to target */
+.move-line {
+    position: absolute;
+    height: 2px;
+    background-color: rgba(0, 123, 255, 0.7);
+    transform-origin: left;
+    z-index: 14;
+    pointer-events: none;
+}
+
+/* Animation for piece selection */
+@keyframes pulse-blue {
+    0% {
+        transform: translate(-50%, -50%) scale(1);
+        box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.1);
+        box-shadow: 0 0 0 10px rgba(0, 123, 255, 0);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        box-shadow: 0 0 0 0 rgba(0, 123, 255, 0);
+    }
+}
+
+.selected-piece {
+    animation: pulse-blue 2s infinite;
+}
+
+/* Robot status indicators */
+.connection-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.connection-indicator.online {
+    background-color: #28a745;
+    box-shadow: 0 0 8px #28a745;
+}
+
+.connection-indicator.offline {
+    background-color: #dc3545;
+    box-shadow: 0 0 8px #dc3545;
+}
+
+.connection-indicator.busy {
+    background-color: #ffc107;
+    box-shadow: 0 0 8px #ffc107;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Game history styling */
+#game-history {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.timestamp {
+    color: #6c757d;
+    font-size: 0.8rem;
+}
