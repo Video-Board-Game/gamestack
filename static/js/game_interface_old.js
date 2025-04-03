@@ -19,135 +19,12 @@ class GameInterface {
         this.statusMessages = document.getElementById('status-messages');
         this.gameHistoryList = document.getElementById('game-history-list');
         
-        // Initialize WebSocket
-        this.initializeWebSocket();
-        
         // Initialize the interface
         this.setupEventListeners();
         this.loadGameState();
-    }
-
-    initializeWebSocket() {
-        const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const host = 'mcalec.dyn.wpi.edu';
-        const port = '8000';
         
-        this.websocket = new WebSocket(
-            `${wsScheme}://${host}:${port}/ws/game/${this.sessionId}/`
-        );
-        
-        this.websocket.onopen = () => {
-            this.showStatus('WebSocket connection established', 'success');
-            // Request initial game state
-            this.sendWebSocketMessage({
-                command: 'get_game_state'
-            });
-        };
-        
-        this.websocket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            this.handleWebSocketMessage(data);
-        };
-        
-        this.websocket.onclose = () => {
-            this.showStatus('WebSocket connection closed. Reconnecting...', 'warning');
-            // Attempt to reconnect after 3 seconds
-            setTimeout(() => this.initializeWebSocket(), 3000);
-        };
-        
-        this.websocket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            this.showStatus('WebSocket connection error', 'danger');
-        };
-    }
-    
-    sendWebSocketMessage(message) {
-        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-            this.websocket.send(JSON.stringify(message));
-        } else {
-            console.warn('WebSocket not ready, message not sent:', message);
-            this.showStatus('Connection issue. Please refresh the page.', 'warning');
-        }
-    }
-    
-    handleWebSocketMessage(data) {
-        console.log('Received WebSocket message:', data);
-        
-        switch (data.type) {
-            case 'game_state':
-                this.gameState = data.state;
-                this.renderGameState();
-                break;
-                
-            case 'piece_detected':
-                this.selectedPiece = data.piece;
-                this.updateSelectedPieceInfo();
-                this.highlightSelectedPiece();
-                this.showStatus(`Selected: ${data.piece.type}`, 'success');
-                this.robotStatus = 'idle';
-                break;
-            
-            case 'move_response':
-                if (data.success) {
-                    this.showStatus('Move completed successfully', 'success');
-                    this.robotStatus = 'idle';
-                    // Request updated game state
-                    this.sendWebSocketMessage({
-                        command: 'get_game_state'
-                    });
-                    this.cancelMove(); // Reset selection
-                    
-                    // Add to move history if not already updated by game state
-                    if (this.gameHistoryList && data.move) {
-                        this.addMoveToHistory(data.move);
-                    }
-                } else {
-                    this.showStatus('Move failed: ' + (data.error || 'Unknown error'), 'danger');
-                    this.robotStatus = 'idle';
-                    this.confirmMoveBtn.disabled = false;
-                    this.cancelMoveBtn.disabled = false;
-                }
-                break;
-                
-            case 'camera_response':
-                if (data.success) {
-                    this.showStatus(`Camera moved ${data.direction}`, 'success');
-                } else {
-                    this.showStatus('Failed to move camera: ' + (data.error || 'Unknown error'), 'warning');
-                }
-                break;
-                
-            case 'reset_response':
-                if (data.success) {
-                    this.showStatus('Game has been reset', 'success');
-                    // Request updated game state
-                    this.sendWebSocketMessage({
-                        command: 'get_game_state'
-                    });
-                    this.cancelMove();
-                    
-                    // Add reset to history
-                    if (this.gameHistoryList) {
-                        this.addResetToHistory();
-                    }
-                } else {
-                    this.showStatus('Failed to reset game: ' + (data.error || 'Unknown error'), 'danger');
-                }
-                this.robotStatus = 'idle';
-                break;
-                
-            case 'robot_status':
-                this.robotStatus = data.status;
-                if (data.status === 'error') {
-                    this.showStatus(`Robot error: ${data.message}`, 'danger');
-                } else if (data.status === 'moving') {
-                    this.showStatus(`Robot status: ${data.message}`, 'info');
-                }
-                break;
-                
-            default:
-                console.warn('Unknown message type:', data.type);
-        }
+        // Set up polling for game state updates (since we're not using WebSockets)
+        this.startGameStatePolling();
     }
 
     setupEventListeners() {
@@ -236,11 +113,31 @@ class GameInterface {
         }
     }
 
+    startGameStatePolling() {
+        // Poll for game state updates every 5 seconds
+        this.gameStateInterval = setInterval(() => {
+            this.loadGameState();
+        }, 5000);
+    }
+    
+    stopGameStatePolling() {
+        if (this.gameStateInterval) {
+            clearInterval(this.gameStateInterval);
+        }
+    }
+
     loadGameState() {
-        // Request game state via WebSocket
-        this.sendWebSocketMessage({
-            command: 'get_game_state'
-        });
+        // Load the current game state from the server
+        fetch(`/api/game/${this.sessionId}/state/`)
+            .then(response => response.json())
+            .then(data => {
+                this.gameState = data;
+                this.renderGameState();
+            })
+            .catch(error => {
+                console.error('Error loading game state:', error);
+                this.showStatus('Failed to load game state', 'danger');
+            });
     }
 
     renderGameState() {
@@ -354,63 +251,36 @@ class GameInterface {
             this.gameHistoryList.appendChild(item);
         });
     }
-    
-    addMoveToHistory(move) {
-        if (!this.gameHistoryList) return;
-        
-        const time = new Date();
-        const timeString = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        const item = document.createElement('li');
-        item.className = 'list-group-item';
-        item.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    Moved ${move.piece_type} from (${Math.round(move.from.x)}, ${Math.round(move.from.y)}) 
-                    to (${Math.round(move.to.x)}, ${Math.round(move.to.y)})
-                </div>
-                <span class="timestamp">${timeString}</span>
-            </div>
-        `;
-        
-        if (this.gameHistoryList.firstChild) {
-            this.gameHistoryList.insertBefore(item, this.gameHistoryList.firstChild);
-        } else {
-            this.gameHistoryList.appendChild(item);
-        }
-    }
-    
-    addResetToHistory() {
-        if (!this.gameHistoryList) return;
-        
-        const time = new Date();
-        const timeString = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        const item = document.createElement('li');
-        item.className = 'list-group-item';
-        item.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center">
-                <div>Game reset to starting position</div>
-                <span class="timestamp">${timeString}</span>
-            </div>
-        `;
-        
-        if (this.gameHistoryList.firstChild) {
-            this.gameHistoryList.insertBefore(item, this.gameHistoryList.firstChild);
-        } else {
-            this.gameHistoryList.appendChild(item);
-        }
-    }
 
     selectPieceAt(x, y) {
         this.showStatus('Detecting piece...', 'info');
         this.robotStatus = 'detecting';
         
-        // Use WebSocket instead of fetch
-        this.sendWebSocketMessage({
-            command: 'detect_piece',
-            x: x,
-            y: y
+        fetch(`/api/game/${this.sessionId}/detect_piece/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': this.getCsrfToken()
+            },
+            body: JSON.stringify({ x, y })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.type === 'piece_detected') {
+                this.selectedPiece = data.piece;
+                this.updateSelectedPieceInfo();
+                this.highlightSelectedPiece();
+                this.showStatus(`Selected: ${data.piece.type}`, 'success');
+                this.robotStatus = 'idle';
+            } else {
+                this.showStatus('No piece detected at that location', 'warning');
+                this.robotStatus = 'idle';
+            }
+        })
+        .catch(error => {
+            console.error('Error detecting piece:', error);
+            this.showStatus('Error detecting piece', 'danger');
+            this.robotStatus = 'idle';
         });
     }
     
@@ -496,12 +366,61 @@ class GameInterface {
             this.confirmMoveBtn.disabled = true;
             this.cancelMoveBtn.disabled = true;
             
-            // Use WebSocket instead of fetch
-            this.sendWebSocketMessage({
-                command: 'move_piece',
-                piece_id: this.selectedPiece.id,
-                target_x: this.targetPosition.x,
-                target_y: this.targetPosition.y
+            fetch(`/api/game/${this.sessionId}/move_piece/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify({
+                    piece_id: this.selectedPiece.id,
+                    target_x: this.targetPosition.x,
+                    target_y: this.targetPosition.y
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.type === 'move_response' && data.success) {
+                    this.showStatus('Move completed successfully', 'success');
+                    this.robotStatus = 'idle';
+                    this.loadGameState(); // Refresh game state
+                    this.cancelMove(); // Reset selection
+                    
+                    // Add to move history
+                    if (this.gameHistoryList && data.move_id) {
+                        const time = new Date();
+                        const timeString = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        
+                        const item = document.createElement('li');
+                        item.className = 'list-group-item';
+                        item.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    Moved ${this.selectedPiece.type} to (${Math.round(this.targetPosition.x)}, ${Math.round(this.targetPosition.y)})
+                                </div>
+                                <span class="timestamp">${timeString}</span>
+                            </div>
+                        `;
+                        
+                        if (this.gameHistoryList.firstChild) {
+                            this.gameHistoryList.insertBefore(item, this.gameHistoryList.firstChild);
+                        } else {
+                            this.gameHistoryList.appendChild(item);
+                        }
+                    }
+                } else {
+                    this.showStatus('Move failed: ' + (data.error || 'Unknown error'), 'danger');
+                    this.robotStatus = 'idle';
+                    this.confirmMoveBtn.disabled = false;
+                    this.cancelMoveBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error moving piece:', error);
+                this.showStatus('Error sending move command', 'danger');
+                this.robotStatus = 'idle';
+                this.confirmMoveBtn.disabled = false;
+                this.cancelMoveBtn.disabled = false;
             });
         }
     }
@@ -529,10 +448,28 @@ class GameInterface {
     controlCamera(direction) {
         this.showStatus(`Moving camera ${direction}...`, 'info');
         
-        // Use WebSocket instead of fetch
-        this.sendWebSocketMessage({
-            command: 'control_camera',
-            direction: direction
+        fetch(`/api/camera/control/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': this.getCsrfToken()
+            },
+            body: JSON.stringify({
+                session_id: this.sessionId,
+                direction: direction
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                this.showStatus(`Camera moved ${direction}`, 'success');
+            } else {
+                this.showStatus('Failed to move camera: ' + (data.error || 'Unknown error'), 'warning');
+            }
+        })
+        .catch(error => {
+            console.error('Error controlling camera:', error);
+            this.showStatus('Error sending camera command', 'danger');
         });
     }
 
@@ -544,9 +481,49 @@ class GameInterface {
         this.showStatus('Resetting game...', 'info');
         this.robotStatus = 'moving';
         
-        // Use WebSocket instead of fetch
-        this.sendWebSocketMessage({
-            command: 'reset_game'
+        fetch(`/api/game/${this.sessionId}/reset/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': this.getCsrfToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                this.showStatus('Game has been reset', 'success');
+                this.loadGameState();
+                this.cancelMove();
+                
+                // Add to history
+                if (this.gameHistoryList) {
+                    const time = new Date();
+                    const timeString = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    
+                    const item = document.createElement('li');
+                    item.className = 'list-group-item';
+                    item.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>Game reset to starting position</div>
+                            <span class="timestamp">${timeString}</span>
+                        </div>
+                    `;
+                    
+                    if (this.gameHistoryList.firstChild) {
+                        this.gameHistoryList.insertBefore(item, this.gameHistoryList.firstChild);
+                    } else {
+                        this.gameHistoryList.appendChild(item);
+                    }
+                }
+            } else {
+                this.showStatus('Failed to reset game: ' + (data.error || 'Unknown error'), 'danger');
+            }
+            this.robotStatus = 'idle';
+        })
+        .catch(error => {
+            console.error('Error resetting game:', error);
+            this.showStatus('Error resetting game', 'danger');
+            this.robotStatus = 'idle';
         });
     }
 

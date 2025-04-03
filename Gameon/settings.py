@@ -22,7 +22,7 @@ from firebase_admin import credentials
 from firebase_admin import firestore, db, auth
 
 # Path to your service account key JSON file
-cred = credentials.Certificate('C:\\Users\\abose\\OneDrive\\Desktop\\Final_25\\Gameon\\Gameon\\serviceAccountKey.json')
+cred = credentials.Certificate('Gameon/serviceAccountKey.json')
 
 # Initialize Firebase with your credentials
 firebase_app = firebase_admin.initialize_app(cred, {
@@ -72,7 +72,11 @@ SECRET_KEY = 'django-insecure-dfn#b_3h(zbbrbc4l*id0sl4%l6%^%1x7b+tg$3&xq#80#!!_%
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["127.0.0.1", "localhost","mcalec.dyn.wpi.edu","mcalec"]
+
+CSRF_TRUSTED_ORIGINS =[
+    "http://127.0.0.1", "http://localhost","http://mcalec.dyn.wpi.edu"
+]
 
 
 # Application definition

@@ -127,7 +127,7 @@
             // WebSocket connection for robot status
             const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
             const statusSocket = new WebSocket(
-                `${wsScheme}://${window.location.host}/ws/status/`
+                `${wsScheme}://${"mcalec.dyn.wpi.edu"}:8000/ws/status/`
             );
             
             statusSocket.onopen = function() {
