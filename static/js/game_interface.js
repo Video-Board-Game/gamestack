@@ -5,15 +5,16 @@ class GameInterface {
         this.sessionId = sessionId;
         this.gameType = gameType;
         this.gameState = initialGameState || {};
-        this.selectedPiece = null;
+        this.startPosition = null;
         this.targetPosition = null;
         this.robotStatus = 'idle'; // idle, moving, error
         this.moveHistory = [];
+        this.selectionPhase = 'start'; // Can be 'start' or 'target'
         
         // DOM Elements
         this.cameraFeed = document.getElementById('camera-feed');
         this.pieceOverlay = document.getElementById('piece-overlay');
-        this.selectedPieceInfo = document.getElementById('selected-piece-info');
+        this.selectionInfo = document.getElementById('selected-piece-info');
         this.confirmMoveBtn = document.getElementById('confirm-move');
         this.cancelMoveBtn = document.getElementById('cancel-move');
         this.statusMessages = document.getElementById('status-messages');
@@ -79,14 +80,6 @@ class GameInterface {
                 this.renderGameState();
                 break;
                 
-            case 'piece_detected':
-                this.selectedPiece = data.piece;
-                this.updateSelectedPieceInfo();
-                this.highlightSelectedPiece();
-                this.showStatus(`Selected: ${data.piece.type}`, 'success');
-                this.robotStatus = 'idle';
-                break;
-            
             case 'move_response':
                 if (data.success) {
                     this.showStatus('Move completed successfully', 'success');
@@ -166,8 +159,9 @@ class GameInterface {
             const normalizedX = Math.round((x / rect.width) * 100);
             const normalizedY = Math.round((y / rect.height) * 100);
             
-            if (!this.selectedPiece) {
-                this.selectPieceAt(normalizedX, normalizedY);
+            if (this.selectionPhase === 'start') {
+                this.setStartPosition(normalizedX, normalizedY);
+                this.selectionPhase = 'target';
             } else {
                 this.setTargetPosition(normalizedX, normalizedY);
             }
@@ -344,7 +338,7 @@ class GameInterface {
             item.innerHTML = `
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        Moved ${move.piece_type} from (${Math.round(move.from.x)}, ${Math.round(move.from.y)}) 
+                        Moved from (${Math.round(move.from.x)}, ${Math.round(move.from.y)}) 
                         to (${Math.round(move.to.x)}, ${Math.round(move.to.y)})
                     </div>
                     <span class="timestamp">${timeString}</span>
@@ -366,7 +360,7 @@ class GameInterface {
         item.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    Moved ${move.piece_type} from (${Math.round(move.from.x)}, ${Math.round(move.from.y)}) 
+                    Moved from (${Math.round(move.from.x)}, ${Math.round(move.from.y)}) 
                     to (${Math.round(move.to.x)}, ${Math.round(move.to.y)})
                 </div>
                 <span class="timestamp">${timeString}</span>
@@ -402,82 +396,48 @@ class GameInterface {
         }
     }
 
-    selectPieceAt(x, y) {
-        this.showStatus('Detecting piece...', 'info');
-        this.robotStatus = 'detecting';
+    setStartPosition(x, y) {
+        this.startPosition = { x, y };
+        this.showStatus(`Start position set (${x}, ${y})`, 'success');
+        this.updateSelectionInfo();
         
-        // Use WebSocket instead of fetch
-        this.sendWebSocketMessage({
-            command: 'detect_piece',
-            x: x,
-            y: y
-        });
+        // Add visual indicator for the start location
+        this.showPositionIndicator(x, y, 'start-indicator', 'blue');
     }
     
-    highlightSelectedPiece() {
-        // Remove any existing selection highlights
-        const existingSelection = document.querySelector('.selected-piece');
-        if (existingSelection) {
-            existingSelection.classList.remove('selected-piece');
-        }
-        
-        // Add selection highlight to the selected piece
-        if (this.selectedPiece) {
-            const pieceEl = document.getElementById(`piece-${this.selectedPiece.id}`);
-            if (pieceEl) {
-                pieceEl.classList.add('selected-piece');
-                // Make the highlight pulse
-                pieceEl.style.animation = 'pulse-blue 2s infinite';
-            }
-        }
-    }
-
-    updateSelectedPieceInfo() {
-        if (this.selectedPiece) {
-            let pieceInfo = `
-                <div class="card mb-2">
-                    <div class="card-body">
-                        <h5 class="card-title">Selected Piece</h5>
-                        <p class="card-text">
-                            <strong>Type:</strong> ${this.selectedPiece.type.charAt(0).toUpperCase() + this.selectedPiece.type.slice(1)}<br>
-                            <strong>Color:</strong> ${this.selectedPiece.color.charAt(0).toUpperCase() + this.selectedPiece.color.slice(1)}
-                        </p>
-                    </div>
-                </div>
-            `;
-            this.selectedPieceInfo.innerHTML = pieceInfo;
-            this.cancelMoveBtn.disabled = false;
-        } else {
-            this.selectedPieceInfo.innerHTML = '<p class="text-muted">Click on a piece to select it</p>';
-            this.cancelMoveBtn.disabled = true;
-            this.confirmMoveBtn.disabled = true;
-        }
-    }
-
     setTargetPosition(x, y) {
         this.targetPosition = { x, y };
-        this.showStatus(`Target location set (${x}, ${y})`, 'success');
+        this.showStatus(`Target position set (${x}, ${y})`, 'success');
         this.confirmMoveBtn.disabled = false;
+        this.updateSelectionInfo();
         
         // Add visual indicator for the target location
-        this.showTargetIndicator(x, y);
+        this.showPositionIndicator(x, y, 'target-indicator', 'green');
     }
 
-    showTargetIndicator(x, y) {
-        // Clear any existing indicators
-        const existingIndicator = document.getElementById('target-indicator');
+    showPositionIndicator(x, y, id, color) {
+        // Clear any existing indicator
+        const existingIndicator = document.getElementById(id);
         if (existingIndicator) {
             existingIndicator.remove();
         }
         
         // Create and position the indicator
         const indicator = document.createElement('div');
-        indicator.id = 'target-indicator';
+        indicator.id = id;
         indicator.className = 'position-absolute';
         indicator.style.width = '20px';
         indicator.style.height = '20px';
-        indicator.style.backgroundColor = 'rgba(0, 255, 0, 0.5)';
-        indicator.style.border = '2px solid green';
+        
+        // Set colors based on type
+        if (color === 'blue') {
+            indicator.style.backgroundColor = 'rgba(0, 0, 255, 0.5)';
+            indicator.style.border = '2px solid blue';
+        } else {
+            indicator.style.backgroundColor = 'rgba(0, 255, 0, 0.5)';
+            indicator.style.border = '2px solid green';
+        }
+        
         indicator.style.borderRadius = '50%';
         indicator.style.transform = 'translate(-50%, -50%)';
         indicator.style.left = `${x}%`;
@@ -489,40 +449,65 @@ class GameInterface {
         this.pieceOverlay.appendChild(indicator);
     }
 
+    updateSelectionInfo() {
+        let infoHTML = '<div class="card mb-2"><div class="card-body"><h5 class="card-title">Selected Positions</h5>';
+        
+        if (this.startPosition) {
+            infoHTML += `<p><strong>Start:</strong> (${this.startPosition.x}, ${this.startPosition.y})</p>`;
+        }
+        
+        if (this.targetPosition) {
+            infoHTML += `<p><strong>Target:</strong> (${this.targetPosition.x}, ${this.targetPosition.y})</p>`;
+        }
+        
+        if (!this.startPosition && !this.targetPosition) {
+            infoHTML += '<p class="text-muted">Click to select start position</p>';
+        } else if (this.startPosition && !this.targetPosition) {
+            infoHTML += '<p class="text-muted">Now click to select target position</p>';
+        }
+        
+        infoHTML += '</div></div>';
+        this.selectionInfo.innerHTML = infoHTML;
+        
+        // Enable/disable buttons based on selections
+        this.cancelMoveBtn.disabled = !(this.startPosition || this.targetPosition);
+        this.confirmMoveBtn.disabled = !(this.startPosition && this.targetPosition);
+    }
+
     confirmMove() {
-        if (this.selectedPiece && this.targetPosition) {
+        if (this.startPosition && this.targetPosition) {
             this.showStatus('Sending move command to robot...', 'info');
             this.robotStatus = 'moving';
             this.confirmMoveBtn.disabled = true;
             this.cancelMoveBtn.disabled = true;
             
-            // Use WebSocket instead of fetch
+            // Send both start and target positions
             this.sendWebSocketMessage({
                 command: 'move_piece',
-                piece_id: this.selectedPiece.id,
-                target_x: this.targetPosition.x,
-                target_y: this.targetPosition.y
+                start_x: this.startPosition.x,
+                start_y: this.startPosition.y,
+                goal_x: this.targetPosition.x,
+                goal_y: this.targetPosition.y
             });
         }
     }
 
     cancelMove() {
-        // Clear any target indicators
-        const indicator = document.getElementById('target-indicator');
-        if (indicator) {
-            indicator.remove();
+        // Clear any position indicators
+        const startIndicator = document.getElementById('start-indicator');
+        if (startIndicator) {
+            startIndicator.remove();
         }
         
-        // Remove selection highlight
-        const selectedPieceEl = document.querySelector('.selected-piece');
-        if (selectedPieceEl) {
-            selectedPieceEl.classList.remove('selected-piece');
-            selectedPieceEl.style.animation = '';
+        const targetIndicator = document.getElementById('target-indicator');
+        if (targetIndicator) {
+            targetIndicator.remove();
         }
         
-        this.selectedPiece = null;
+        this.startPosition = null;
         this.targetPosition = null;
-        this.updateSelectedPieceInfo();
+        this.selectionPhase = 'start';
+        this.updateSelectionInfo();
         this.showStatus('Selection cleared', 'info');
     }
     

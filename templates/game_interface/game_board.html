@@ -53,7 +53,27 @@
                          data-session-id="{{ game_session.id }}"
                          data-game-type="{{ game_type }}"
                          data-game-state="{{ game_state|safe }}">
-                        <img id="camera-feed" src="{{ camera_feed_url }}" alt="Game Board Camera Feed">
+                        <!-- <img id="camera-feed" src="{{ camera_feed_url }}" alt="Game Board Camera Feed"> -->
+                        <img id="camera-feed" src="">
+                        <script>
+                            // https://stackoverflow.com/questions/77494838/streaming-camera-via-websockets-in-fastapi
+                            let ws = new WebSocket("ws://mcalec.dyn.wpi.edu:8000/ws/camera/");
+                            let image = document.getElementById("camera-feed")
+                            image.onload = function(event){
+                                URL.revokeObjectURL(this.src);
+                            }
+                            ws.onmessage = function(event) {
+                                image.src = URL.createObjectURL(event.data);
+                            };
+
+                            ws.onclose = function(event) {
+                                console.log("Camera WebSocket closed:", event);
+                            };
+
+                            window.addEventListener('beforeunload', function() {
+                                ws.close();
+                            });
+                        </script>
                         <div id="piece-overlay"></div>
                         
                         {% csrf_token %}
@@ -121,10 +141,10 @@
                     </div>
                 </div>
                 
-                <!-- Camera controls -->
+                <!-- Arm controls -->
                 <div class="card mb-4">
                     <div class="card-header">
-                        <h5 class="mb-0">Camera Controls</h5>
+                        <h5 class="mb-0">Arm Rotate and Height Controls</h5>
                     </div>
                     <div class="card-body">
                         <div class="row mb-3">
